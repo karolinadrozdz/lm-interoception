@@ -1,0 +1,11 @@
+# "Which sentence?" (paper Sec. 4 localization) with the dropout only in window X or Y: the paper's layers_dropout sweep with other layers.
+program: spe-localize
+name: qwen3_14b-win-loc-dropout
+parameters:
+  model: {value: qwen3_14b}
+  experiment.stage: {value: window}
+  experiment.num_samples: {value: 1000}
+  hydra_overrides: {values: ["perturbation.first_layer=0 perturbation.last_layer=3", "perturbation.first_layer=9 perturbation.last_layer=12"]}
+  experiment.sentences_file: {value: data/sentences/15tok.txt}
+  perturbation.target_perturbation: {value: DROPOUT}
+  perturbation.dropout_rate: {values: [0.1, 0.136, 0.172, 0.208, 0.244, 0.28, 0.316, 0.352, 0.388, 0.424, 0.46]}

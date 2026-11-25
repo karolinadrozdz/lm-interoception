@@ -1,0 +1,38 @@
+# Stages of docs/plan-01-one-band-where.md, model Qwen3-14B (40 layers; the paper's first third = layers 0-12).
+# "paper:<file>" = a sweep file of the authors' repo, run unchanged (same configs, same hashed seeds).
+# Windows of the band: X = layers 0-3, Y = layers 9-12 (0-based, inclusive). Strengths = the 11 bins of Table 1.
+
+check:   # 2 jobs: GPU path + prompts/token maps + time per sample (100 samples); activation sizes per layer (no perturbation)
+  - sweeps/qwen3_14b/check.yaml
+  - sweeps/qwen3_14b/norms.yaml
+
+anchor:  # the paper's runs, unchanged: Fig. 2 (localization), Fig. 27 (thirds of layers), Fig. 5 (detection)
+  - paper:sweeps/qwen3_14b/loc_dropout.yaml
+  - paper:sweeps/qwen3_14b/loc_noise.yaml
+  - paper:sweeps/qwen3_14b/layers_dropout.yaml
+  - paper:sweeps/qwen3_14b/layers_noise.yaml
+  - paper:sweeps/qwen3_14b/yesno_dropout.yaml
+  - paper:sweeps/qwen3_14b/yesno_noise.yaml
+
+band:    # the paper's questions ("which sentence?", "was a perturbation applied?"), perturbation only in window X or Y
+  - sweeps/qwen3_14b/win_loc_dropout.yaml
+  - sweeps/qwen3_14b/win_loc_noise.yaml
+  - sweeps/qwen3_14b/win_yesno_dropout.yaml
+  - sweeps/qwen3_14b/win_yesno_noise.yaml
+
+where:   # the new question: window X or window Y? (src/lmi/where.py)
+  - sweeps/qwen3_14b/where_pair_dropout.yaml
+  - sweeps/qwen3_14b/where_pair_noise.yaml
+  - sweeps/qwen3_14b/where_single_dropout.yaml
+  - sweeps/qwen3_14b/where_single_noise.yaml
+
+extra:   # recommended by the design review, run with anchor + band: per-window detectability above the Table 1 range, the yes-bias
+         # control and the comprehension ceiling per window (strengths are measured, not changed, for the main stages)
+  - sweeps/qwen3_14b/extra_win_loc_dropout.yaml
+  - sweeps/qwen3_14b/extra_win_loc_noise.yaml
+  - sweeps/qwen3_14b/extra_win_yesno_dropout.yaml
+  - sweeps/qwen3_14b/extra_win_yesno_noise.yaml
+  - sweeps/qwen3_14b/extra_win_ctrl_dropout.yaml
+  - sweeps/qwen3_14b/extra_win_ctrl_noise.yaml
+  - sweeps/qwen3_14b/extra_win_topic_dropout.yaml
+  - sweeps/qwen3_14b/extra_win_topic_noise.yaml

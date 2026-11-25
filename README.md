@@ -1,62 +1,89 @@
 # lm-interoception
 
-Interoception vs introspection in language models.
+Can language models sense *what is going on in their own substrate* (interoception: WHAT), as distinct
+from knowing *how they decide* (introspection: HOW)?
 
-## Research question
+We build directly on Fornasiere et al. 2026, *Language models recognize dropout and Gaussian noise
+applied to their activations* (arXiv:2604.17465; notes in `docs/fornasiere2026-reference.md`).
+They perturb the activations of one sentence and show that models can tell **whether** a perturbation was
+applied and to **which** sentence. We ask **where** in the network it was applied.
 
-Is a model's access to *what* its computation runs on (interoception: the state of its own substrate) related to its access to *how* it computes (introspection / metacognition: the process or reasons behind a decision)? In humans the two are linked: people who diagnose the causes of their errors on hard cognitive tasks also tend to localize the source of pain better. We ask whether the two kinds of self-access are separable in LLMs.
+Plan 01 (`docs/plan-01-one-band-where.md`): Qwen3-14B, zero-shot, everything as in the paper except:
+- the perturbation is restricted to one of two windows of the paper's first layer band, X = layers 0-3
+  or Y = layers 9-12;
+- one new question asks which window it was.
 
-## Where the project stalled
+## Layout
 
-The first plan used the Betley et al. (2025) paradigm: fine-tune a behaviour, then ask the model to describe it. We planned three datasets: (1) metacognitive (Betley / Plunkett et al. 2025), (2) interoceptive (e.g. long reasoning traces on certain topics), (3) metacognitive tasks that need interoceptive insight.
+```
+src/lmi/            our code; the authors' package `spe` is imported as a library, never modified
+  grid.py           sweep file -> jobs (the authors' W&B grid format, so their seeds are reproduced)
+  where.py          the new 'where' question: pair (localization prompt) and single (zero-shot prompt)
+  run.py            runs a shard of jobs on one GPU, loads the model once, writes json/parquet/log per run
+  summarize.py      results -> summary.csv, accuracy tables, Table 1 reproduction check
+sweeps/manifest.yaml  stages -> sweep files ("paper:" = the authors' files, run unchanged)
+sweeps/qwen3_14b/     our sweeps (window runs of the paper's questions, and the where question)
+athena/             Cyfronet Athena: env.sh (edit), setup.sh, submit.sh, run.sbatch
+tests/              CPU tests (hook placement per window)
+docs/               paper reference notes, plans
+external/           the authors' repo at commit ad7ce52 (gitignored; setup.sh clones it)
+```
 
-The problem: anything learned from examples of behaviour is a behavioural disposition. Long vs short traces only differ in output length, so dataset 2 collapses into dataset 1. Training-time manipulations (steering during training, disabling a MoE expert during training) have the same issue, because at test time nothing differs internally and the model can only answer from a learned association.
+## Stages (Qwen3-14B, 1000 samples per run, strengths = the 11 bins of the paper's Table 1 unless noted)
 
-What interoception needs is ground truth that comes from a manipulation of internal state during the trial, which the output does not reveal.
+| Stage | Runs | What |
+|---|---|---|
+| `check` | 2 | one run of 100 samples at dropout 0.3 (GPU path, prompts and token maps in the log, time per run); activation sizes per layer, without perturbation (`norms`) |
+| `anchor` | 191 | the paper's own sweeps: localization (Fig. 2), thirds of layers (Fig. 27), detection (Fig. 5) |
+| `band` | 88 | the paper's "which sentence?" and "was a perturbation applied?" with the perturbation only in X or in Y |
+| `where` | 192 | the new question, see below; strength 0 is the no-perturbation baseline |
+| `extra` | 116 | band runs above the Table 1 range, plus the yes-bias and comprehension controls per window |
 
-## Proposed task: same error, two causes
+The `where` stage has two formats, each run with dropout and with noise:
 
-Make the model wrong in two ways that look identical from the outside, then ask it why it was wrong.
+- **pair** (the localization prompt). Both copies of the sentence are perturbed, one in X and one in Y.
+  - The question asks which copy had the perturbation in "your earlier layers", or in "your layers 1-4 of 40".
+  - The window of copy A and the window named are exactly counterbalanced, so always picking the more salient copy, or always picking A, scores 50%.
+  - With `premise=true`, the prompt states that both sentences were perturbed, one in each window.
+- **single** (the zero-shot classification prompt). One sentence is perturbed, in X or in Y. The options use the paper's `NAME (description)` format:
+  - `EARLIER LAYERS (a perturbation in the earlier of two groups of your layers)` / `LATER LAYERS (...)`;
+  - `LAYERS 1-4 OF 40 (a perturbation in your layers 1-4 of 40)` / `LAYERS 10-13 OF 40 (...)`;
+  - the bare label controls `X` / `Y` and `BRALTO` / `SIVEK`.
 
-- **HOW lesion (process).** The computation takes a different route. For example, steer the representation of one attribute in a multi-attribute choice so the choice flips from A to B. The flip has a reason the model could in principle report.
-- **WHAT lesion (substrate).** The substrate is impaired with no specific content. For example, add noise or ablate heads/experts in a layer band, tuned to flip A to B at the same rate. The flip has no reason.
+## Run
 
-### Design
+Local CPU check (tiny random model with the real tokenizer and architecture):
 
-1. Use a binary multi-attribute choice task with a discrete answer.
-2. Cross the two lesions in a 2×2 (HOW yes/no × WHAT yes/no). Apply them only at the task token positions.
-3. Keep only trials where the outputs are identical across conditions: same answer, same tokens. The behaviour then carries no information about the cause, so above-chance self-report has to come from internal access.
-4. Ask two follow-up questions, with no intervention at the report positions (the model reads its earlier state through the KV cache):
-   - *Process question (HOW):* "Which consideration drove your choice?" Ground truth: the steered attribute, or none.
-   - *State question (WHAT):* forced choice between "how I weighed the options" and "something was off in how I processed it". Ground truth: presence of the substrate lesion.
-5. Observer control: a clean copy of the model sees the identical transcript and answers the same questions about the other model. Self minus observer is the privileged-access measure, computed separately for HOW and WHAT.
+```bash
+cd external/llm-dropout-noise-recognition && uv sync --frozen && cd ../..
+PYTHONUTF8=1 PYTHONPATH=src external/llm-dropout-noise-recognition/.venv/bin/python -m lmi.run --stage check anchor band where --smoke
+```
 
-### What it measures
+On Windows the interpreter is at `.venv/Scripts/python.exe`. Tests: `... python -m pytest -q tests`.
 
-- **Double dissociation within one task.** If process reports track only the HOW factor and state reports track only the WHAT factor, the two forms of self-access are separable. If both track the same factor, they are entangled.
-- **Misattribution.** When the WHAT lesion causes the flip, does the model invent a reason ("I chose B because of price")? This is the model analogue of misattribution of arousal (Schachter & Singer) and choice blindness. It shows how substrate signals feed into higher-order explanations (the original aim of dataset 3).
-- **Localization (optional third question).** Vary where the WHAT lesion sits (early / middle / late layers) and ask about it: a model version of "where does it hurt".
+On Athena:
 
-## Hard parts, in order
+1. Edit the two `CHANGE_ME` lines in `athena/env.sh`.
+2. Copy this repo to Athena: commit and `git clone`, or `rsync` it (no need to copy `external/` or `results/`). Then run the setup once, on the login node. It clones the authors' code, installs their exact environment, downloads the model, runs the tests and does a dry run:
 
-1. **Output matching.** Calibrating two very different interventions to give identical flips is fiddly and may leave few usable trials. Pilot this first; it decides whether the design works.
-2. **Validity of the HOW lesion.** Show independently that attribute steering shifts attribute weights in a structured way across items, so it is a process change and not just noise.
-3. **Wording of the state question.** Avoid yes-bias: forced choice between causes, plus no-lesion trials.
-4. **A null on WHAT.** Plausible (Ferrara 2026 reports chance on "was your computation altered?"). With the observer arm and the 2×2, a clean null is still informative, especially if HOW access survives.
+   ```bash
+   bash athena/setup.sh
+   ```
 
-## Pilot (first step)
+3. Submit:
 
-One open-weight ~8B model. Build the choice task, implement both lesions, and measure how many output-matched trials can be obtained at comparable flip rates. Go/no-go on the full design from that.
+   ```bash
+   bash athena/submit.sh 1 check                # first, ~minutes: inspect logs/ and $RESULTS_DIR/check/
+   bash athena/submit.sh 8 anchor band extra    # reproduces the paper? each window detectable on its own?
+   bash athena/submit.sh 8 where                # then the new question
+   ```
 
-## Related work (to check further)
+   Resubmitting a command resumes it, skipping finished runs, but only do so after the previous array has ended.
 
-- Betley et al. (2025), behavioural self-awareness: https://arxiv.org/abs/2501.11120
-- Plunkett et al. (2025), Self-Interpretability: https://arxiv.org/abs/2505.17120
-- Atkinson, Plunkett & Bau (2026), Identifying Introspection From the Inside (not yet read in full)
-- Lindsey (2025), Emergent Introspective Awareness in LLMs: https://arxiv.org/abs/2601.01828
-- Lederman & Mahowald (2026), Emergent Introspection in AI is Content-Agnostic: https://arxiv.org/abs/2603.05414
-- arXiv 2512.12411, injection localization in Llama-3.1-8B: https://arxiv.org/abs/2512.12411
-- Ferrara (2026), Open-Weight Masked Introspection, observer control (summary only): https://www.alphaxiv.org/abs/2608.20569
-- Ji-An et al. (2025), metacognitive monitoring and control of internal activations: https://arxiv.org/abs/2505.13763
+4. Summarize:
 
-Novelty check so far: no study found that crosses HOW and WHAT lesions on output-matched trials or measures misattribution between them. Needs a full literature search before writing up.
+   ```bash
+   $PYTHON -m lmi.summarize $RESULTS_DIR  # tables + Table 1 lower-bound check
+   ```
+
+Each run writes `<results>/<stage>/<sweep>/<seed>.json` (config, metrics, timing), `.parquet` (one row per sample) and `.log` (prompts, token maps, per-sample answers, the paper's metric summary).

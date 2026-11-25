@@ -1,0 +1,15 @@
+# Where, pair format: the localization prompt with both copies perturbed (dropout), one in window X, one in Y; the question
+# names one window ("which sentence had a perturbation in your earlier layers / layers 1-4 of 40 ..."); premise=true
+# adds "Both sentences were perturbed: one in your ..., the other in your ...". Strength 0 = no perturbation (bias baseline).
+program: lmi-where-pair
+name: qwen3_14b-where-pair-dropout
+parameters:
+  model: {value: qwen3_14b}
+  experiment.stage: {value: where_pair}
+  experiment.num_samples: {value: 1000}
+  experiment.sentences_file: {value: data/sentences/15tok.txt}
+  perturbation.target_perturbation: {value: DROPOUT}
+  +where.windows: {value: "[[0,3],[9,12]]"}
+  +where.wording: {values: [relative, explicit]}
+  +where.premise: {values: ["false", "true"]}
+  perturbation.dropout_rate: {values: [0, 0.1, 0.136, 0.172, 0.208, 0.244, 0.28, 0.316, 0.352, 0.388, 0.424, 0.46]}

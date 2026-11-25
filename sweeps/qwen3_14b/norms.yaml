@@ -1,0 +1,9 @@
+# Diagnostic, no perturbation: RMS and max |h| of the attention / MLP outputs and of the residual stream at the
+# sentence tokens, per layer (src/lmi/norms.py). sigma / RMS = the relative size of the paper's absolute noise per window.
+program: lmi-norms
+name: qwen3_14b-norms
+parameters:
+  model: {value: qwen3_14b}
+  experiment.stage: {value: norms}
+  experiment.num_samples: {value: 100}
+  experiment.sentences_file: {value: data/sentences/15tok.txt}

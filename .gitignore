@@ -1,0 +1,8 @@
+papers/
+external/
+results/
+logs/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/

@@ -1,0 +1,11 @@
+# Stage extra: "which sentence?" per window above the all-layer range of Table 1 (a window has 8 of the 80 hook sites).
+program: spe-localize
+name: qwen3_14b-extra-win-loc-noise
+parameters:
+  model: {value: qwen3_14b}
+  experiment.stage: {value: window}
+  experiment.num_samples: {value: 1000}
+  hydra_overrides: {values: ["perturbation.first_layer=0 perturbation.last_layer=3", "perturbation.first_layer=9 perturbation.last_layer=12"]}
+  experiment.sentences_file: {value: data/sentences/15tok.txt}
+  perturbation.target_perturbation: {value: NOISE}
+  perturbation.noise_std: {values: [0.12, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5]}

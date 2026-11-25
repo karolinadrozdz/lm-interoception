@@ -1,0 +1,14 @@
+# Stage extra: the paper's yes-bias control (coin-flip question, no correct answer) per window, at min/mid/max of Table 1.
+program: spe-classify
+name: qwen3_14b-extra-win-ctrl-noise
+parameters:
+  model: {value: qwen3_14b}
+  experiment.stage: {value: window_ctrl}
+  experiment.num_samples: {value: 1000}
+  experiment.sentences_file: {value: data/sentences/15tok.txt}
+  prompts/turns: {value: classification/perturbed_ctrl_none}
+  perturbation.active_perturbations: {value: "[NOISE]"}
+  perturbation.dropout_rate: {value: 0}
+  aliases: {value: noise_yes}
+  hydra_overrides: {values: ["perturbation.first_layer=0 perturbation.last_layer=3", "perturbation.first_layer=9 perturbation.last_layer=12"]}
+  perturbation.noise_std: {values: [0.05, 0.075, 0.1]}

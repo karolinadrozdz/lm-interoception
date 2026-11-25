@@ -1,0 +1,10 @@
+# Quick GPU check: one localization run (all layers, dropout 0.3) with 100 samples.
+program: spe-localize
+name: qwen3_14b-check
+parameters:
+  model: {value: qwen3_14b}
+  experiment.stage: {value: check}
+  experiment.num_samples: {value: 100}
+  experiment.sentences_file: {value: data/sentences/15tok.txt}
+  perturbation.target_perturbation: {value: DROPOUT}
+  perturbation.dropout_rate: {value: 0.3}
